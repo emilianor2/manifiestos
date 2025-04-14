@@ -9,20 +9,31 @@ Este proyecto despliega una versión estática personalizada de una página web 
 ### 📁 Repositorio `static-website` 
 
 pagina-web/
+
 ├── index.html
+
 ├── style.css
+
 └── assets
-    └── img.jpg
+
+    └── cv.pdf
     
 ### 📁 Repositorio `manifiestos`
 manifiestos/
 ├── deployment/
+
 │   └── nginx-deployment.yaml         # Deployment que levanta el contenedor NGINX
+
 ├── service/
+
 │   └── nginx-service.yaml            # Service tipo NodePort para exponer la app
+
 ├── volumen/
+
 │   ├── pv.yaml                       # PersistentVolume usando hostPath
+
 │   └── pvc.yaml                      # PersistentVolumeClaim vinculado al PV
+
 └── Documentacion.md                         # Este archivo 🙂
 
 ---
