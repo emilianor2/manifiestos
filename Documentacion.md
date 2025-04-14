@@ -20,7 +20,8 @@ pagina-web/
     
 ### 📁 Repositorio `manifiestos`
 manifiestos/
-├── deployment/
+
+├── deploy/
 
 │   └── nginx-deployment.yaml         # Deployment que levanta el contenedor NGINX
 
@@ -45,6 +46,7 @@ Antes de comenzar, asegurate de tener instalado:
 - [x] **Git**
 - [x] **Minikube**
 - [x] **kubectl**
+- [x] **Docker**
 - [x] Un navegador web
 
 > 💡 Si usás Ubuntu, podés instalar Minikube y kubectl desde la terminal. 
