@@ -1,137 +1,125 @@
 #!/bin/bash
 
-# ==================================================================================
-# Script de despliegue automático con Minikube + Docker Desktop + Kubernetes
+# ================================================================
+# Script de despliegue automático con Minikube + Docker Desktop
 # Autor: Tu Nombre
 # Descripción: Automatiza el montaje de un sitio web estático en Minikube.
-# ==================================================================================
+# ================================================================
 
 set -euo pipefail
 
 # === COLORES ===
 GREEN="\e[32m"
 RED="\e[31m"
+YELLOW="\e[33m"
 RESET="\e[0m"
 
-# === CONFIGURACIÓN ===
-WEB_REPO="https://github.com/emilianor2/static-website"
-K8S_REPO="https://github.com/emilianor2/manifiestos"
-BASE_DIR="${1:-$HOME/Documentos/k8s-web}" # Se puede pasar como argumento
-WEB_MOUNT_DIR="${BASE_DIR}/web-mount"
-K8S_DIR="${BASE_DIR}/k8s-manifests"
-TMP_CLONE_DIR="$(mktemp -d)"
-MOUNT_STRING="${WEB_MOUNT_DIR}:/mnt/web"
+# === VARIABLES ===
+REPO_URL="https://github.com/Estanislao-Tello/web-estatica.git"
+MOUNT_PATH="/mnt/web"
+TMP_DIR="$(mktemp -d -t webrepo-XXXX)"
+WEB_DIR="$HOME/Documents/k8s-web/web-mount"
 
 # === FUNCIONES ===
 
-log_ok()    { echo -e "${GREEN}[OK] $1${RESET}"; }
-log_error() { echo -e "${RED}[ERROR] $1${RESET}"; }
-log_info()  { echo -e "\n== $1 =="; }
-
-check_command() {
-    if ! command -v "$1" &> /dev/null; then
-        log_error "$1 no está instalado."
-        read -p "¿Querés intentar instalar $1 automáticamente? (s/n): " resp
-        if [[ "$resp" == "s" ]]; then
-            case "$1" in
-                docker)
-                    echo "→ Instalalo manualmente desde: https://docs.docker.com/get-docker/"
-                    ;;
-                kubectl)
-                    echo "→ Instalalo manualmente desde: https://kubernetes.io/docs/tasks/tools/"
-                    ;;
-                minikube)
-                    echo "→ Instalalo manualmente desde: https://minikube.sigs.k8s.io/docs/start/"
-                    ;;
-            esac
+verificar_dependencias() {
+    echo -e "\n== Verificando dependencias necesarias =="
+    for cmd in docker kubectl minikube git; do
+        if ! command -v "$cmd" &>/dev/null; then
+            echo -e "${RED}[ERROR] $cmd no está instalado.${RESET}"
+            exit 1
+        else
+            echo -e "${GREEN}[OK] $cmd está instalado.${RESET}"
         fi
-        exit 1
-    else
-        log_ok "$1 está instalado."
-    fi
+    done
 }
 
-wait_for_pod_running() {
-    local label=$1
-    echo "Esperando que el pod '$label' esté en estado 'Running'..."
-    for _ in {1..30}; do
-        status=$(kubectl get pod -l app="$label" -o jsonpath="{.items[0].status.phase}" 2>/dev/null || echo "Pending")
-        if [[ "$status" == "Running" ]]; then
-            log_ok "El pod '$label' está en ejecución."
+esperar_docker() {
+    echo -e "\n== Verificando si Docker está activo =="
+    for _ in {1..10}; do
+        if docker info &>/dev/null; then
+            echo -e "${GREEN}[OK] Docker está activo.${RESET}"
             return
         fi
-        sleep 10
+        echo -e "${YELLOW}Esperando que Docker se inicie...${RESET}"
+        sleep 6
     done
-    log_error "El pod '$label' no se puso en ejecución a tiempo."
+    echo -e "${RED}[ERROR] Docker no se inició correctamente.${RESET}"
     exit 1
 }
 
-# === INICIO DEL SCRIPT ===
+manejar_minikube_existente() {
+    if minikube status | grep -q "Running"; then
+        echo -e "${YELLOW}[ADVERTENCIA] Ya existe una instancia de Minikube.${RESET}"
+        echo -e "→ Montaje actual: $(minikube mount --list 2>/dev/null | head -n 1)"
+        
+        read -rp "¿Querés eliminar la instancia actual de Minikube y continuar? (s/n): " respuesta
+        if [[ "$respuesta" =~ ^[Ss]$ ]]; then
+            echo -e "${YELLOW}→ Eliminando instancia existente...${RESET}"
+            minikube delete
+        else
+            echo -e "${RED}[ERROR] Abortando para evitar conflictos.${RESET}"
+            exit 1
+        fi
+    fi
+}
 
-log_info "Verificando dependencias necesarias"
-check_command docker
-check_command kubectl
-check_command minikube
-check_command git
-
-log_info "Verificando si Docker está activo"
-if ! docker info &>/dev/null; then
-    log_error "Docker no está activo. Intentando iniciar..."
-    nohup systemctl --user start docker-desktop &>/dev/null &
-    sleep 60
-    if ! docker info &>/dev/null; then
-        log_error "Docker sigue sin estar activo. Iniciá Docker Desktop manualmente."
+clonar_sitio_web() {
+    echo -e "\n== Clonando sitio web desde GitHub =="
+    if ! git clone "$REPO_URL" "$TMP_DIR"; then
+        echo -e "${RED}[ERROR] Fallo al clonar el repositorio del sitio web.${RESET}"
         exit 1
     fi
-    log_ok "Docker Desktop iniciado correctamente."
-else
-    log_ok "Docker está activo."
-fi
+    mkdir -p "$WEB_DIR"
+    cp -r "$TMP_DIR"/* "$WEB_DIR"
+    echo -e "${GREEN}[OK] Sitio web copiado a $WEB_DIR${RESET}"
+}
 
-if minikube status &>/dev/null; then
-    log_error "⚠️ Ya existe una instancia de Minikube."
-    echo "→ Montaje actual: ${MOUNT_STRING}"
-    read -p "¿Querés borrar y reiniciar Minikube desde cero? (s/n): " confirm
-    if [[ "$confirm" == "s" ]]; then
-        log_info "Borrando instancia previa de Minikube"
-        minikube delete
-    else
-        log_error "Abortando para evitar conflictos."
-        exit 1
-    fi
-fi
+iniciar_minikube() {
+    echo -e "\n== Iniciando Minikube =="
+    minikube start --driver=docker
+}
 
-log_info "Preparando estructura de carpetas"
-mkdir -p "$WEB_MOUNT_DIR"
-rm -rf "$K8S_DIR"
+montar_volumen() {
+    echo -e "\n== Montando volumen local en Minikube =="
+    nohup minikube mount "$WEB_DIR":"$MOUNT_PATH" > /dev/null 2>&1 &
+    echo -e "${GREEN}[OK] Volumen montado en $MOUNT_PATH${RESET}"
+}
 
-log_info "Clonando sitio web desde GitHub"
-if ! git clone "$WEB_REPO" "$TMP_CLONE_DIR"; then
-    log_error "Fallo al clonar el repositorio del sitio web."
-    exit 1
-fi
-cp -r "$TMP_CLONE_DIR"/* "$WEB_MOUNT_DIR"
-rm -rf "$TMP_CLONE_DIR"
+desplegar_aplicacion() {
+    echo -e "\n== Aplicando manifiestos de Kubernetes =="
+    kubectl apply -f ./volumen
+    kubectl apply -f ./deploy
+    kubectl apply -f ./service
+}
 
-log_info "Clonando manifiestos desde GitHub"
-if ! git clone "$K8S_REPO" "$K8S_DIR"; then
-    log_error "Fallo al clonar el repositorio de manifiestos."
-    exit 1
-fi
+esperar_pod_running() {
+    echo -e "\n== Esperando a que el pod esté en estado Running =="
+    until kubectl get pods | grep nginx | grep -q Running; do
+        echo -e "${YELLOW}Esperando pod...${RESET}"
+        sleep 5
+    done
+    echo -e "${GREEN}[OK] Pod en estado Running${RESET}"
+}
 
-log_info "Iniciando Minikube con montaje de volumen local"
-minikube start --mount --mount-string="${MOUNT_STRING}"
+abrir_navegador() {
+    echo -e "\n== Exponiendo aplicación web =="
+    minikube service web-service
+}
 
-log_info "Aplicando manifiestos de Kubernetes"
-find "$K8S_DIR" -type f -name "*.yaml" | while read -r yaml_file; do
-    echo -e "${GREEN}→ Aplicando: $yaml_file${RESET}"
-    kubectl apply -f "$yaml_file"
-done
+limpiar() {
+    rm -rf "$TMP_DIR"
+}
 
-wait_for_pod_running "nginx"
-
-log_info "Abriendo el servicio en el navegador"
-minikube service nginx-service
-
-echo -e "\n${GREEN}✅ ¡Listo! Sitio desplegado correctamente usando Minikube y Docker Desktop.${RESET}"
+# === EJECUCIÓN SECUENCIAL ===
+verificar_dependencias
+esperar_docker
+manejar_minikube_existente
+clonar_sitio_web
+iniciar_minikube
+montar_volumen
+desplegar_aplicacion
+esperar_pod_running
+abrir_navegador
+Limpiar
 
