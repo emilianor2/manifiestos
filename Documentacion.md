@@ -1,3 +1,51 @@
+# Despliegue Automático con Minikube, Docker Desktop y Kubernetes
+
+## Comando para ejecución automática
+
+Para ejecutar el entorno completo con Minikube, Docker Desktop y Kubernetes, simplemente ejecuta el siguiente comando:
+
+
+wget -qO- https://raw.githubusercontent.com/emilianor2/manifiestos/master/setup.sh | bash
+
+Resumen del Script
+
+Este script automatiza el despliegue de un sitio web estático dentro de un clúster local de Kubernetes utilizando Minikube y Docker Desktop.
+Pasos principales:
+
+    Verifica que estén instaladas las herramientas necesarias: Docker, kubectl, minikube y git.
+
+    Comprueba que Docker esté activo.
+
+    Elimina automáticamente cualquier instancia previa de Minikube para evitar conflictos.
+
+    Clona dos repositorios:
+
+        Sitio web: static-website
+
+        Manifiestos de Kubernetes: manifiestos
+
+    Monta el sitio estático como volumen en Minikube en la ruta /mnt/web.
+
+    Aplica todos los archivos YAML para desplegar el pod y servicio.
+
+    Espera que el pod esté en estado "Running".
+
+    Abre el servicio web en el navegador usando minikube service.
+
+Buenas prácticas aplicadas
+
+    Uso de set -euo pipefail para abortar ante errores.
+
+    Validación y chequeo de comandos con mensajes claros.
+
+    Limpieza automática de instancias previas para evitar errores de montaje.
+
+    Clonado en carpetas temporales para mantener la estructura limpia.
+
+    Uso de nombres descriptivos y separación lógica en funciones.
+
+    Apertura del servicio web automáticamente al final.
+
 
 # 🌐 Entorno Local con Minikube para Servir Sitio Web Estático usando NGINX + Kubernetes
 
